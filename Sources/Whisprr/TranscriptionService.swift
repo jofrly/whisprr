@@ -1,7 +1,7 @@
 import Foundation
 
 final class TranscriptionService {
-    private let model = "gemini-3-flash-preview"
+    private let model = "gemini-2.5-flash"
 
     func transcribe(audioFileURL: URL, apiKey: String, completion: @escaping (Result<String, Error>) -> Void) {
         let audioData: Data
