@@ -14,4 +14,4 @@
 # release
 
     ./create-dmg.sh
-    open Whisprr.dmg
+    ls Whisprr.dmg
