@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let transcriptionService = TranscriptionService()
     private let statusOverlay = StatusOverlay()
     private let hotkeyRecorder = HotkeyRecorderPanel()
+    private let audioDeviceManager = AudioDeviceManager()
+    private var audioInputSubmenu: NSMenu!
 
     private var hotkey: Hotkey = Hotkey.load()
     private var isRecordingHotkey = false
@@ -42,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         setupHotkey()
 
+        audioDeviceManager.startObserving()
+        NotificationCenter.default.addObserver(self, selector: #selector(audioDevicesChanged), name: AudioDeviceManager.devicesDidChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(recordingInterrupted), name: AudioRecorder.recordingInterruptedNotification, object: nil)
+
         // Check accessibility on launch
         if !TextPaster.checkAccessibility() {
             TextPaster.promptAccessibility()
@@ -67,6 +73,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem(title: "Set API Key...", action: #selector(setAPIKey), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Change Hotkey...", action: #selector(changeHotkey), keyEquivalent: ""))
+
+        audioInputSubmenu = NSMenu()
+        let audioInputItem = NSMenuItem(title: "Audio Input", action: nil, keyEquivalent: "")
+        audioInputItem.submenu = audioInputSubmenu
+        menu.addItem(audioInputItem)
+        rebuildAudioInputMenu()
+
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Whisprr", action: #selector(quit), keyEquivalent: "q"))
 
@@ -193,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if granted {
-                    if self.audioRecorder.startRecording() {
+                    if self.audioRecorder.startRecording(deviceID: self.audioDeviceManager.selectedDeviceID()) {
                         self.state = .recording
                     } else {
                         self.showError("Failed to start recording.")
@@ -291,6 +304,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    // MARK: - Audio Device Selection
+
+    private func rebuildAudioInputMenu() {
+        audioInputSubmenu.removeAllItems()
+
+        let selectedUID = audioDeviceManager.selectedUID()
+
+        let systemDefaultItem = NSMenuItem(title: "System Default", action: #selector(selectAudioInput(_:)), keyEquivalent: "")
+        systemDefaultItem.target = self
+        systemDefaultItem.representedObject = nil
+        systemDefaultItem.state = (selectedUID == nil) ? .on : .off
+        audioInputSubmenu.addItem(systemDefaultItem)
+
+        let devices = audioDeviceManager.inputDevices()
+        if !devices.isEmpty {
+            audioInputSubmenu.addItem(.separator())
+        }
+
+        for device in devices {
+            let item = NSMenuItem(title: device.name, action: #selector(selectAudioInput(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = device.uid as NSString
+            item.state = (selectedUID == device.uid) ? .on : .off
+            audioInputSubmenu.addItem(item)
+        }
+    }
+
+    @objc private func selectAudioInput(_ sender: NSMenuItem) {
+        let uid = sender.representedObject as? String
+        audioDeviceManager.selectDevice(uid: uid)
+        rebuildAudioInputMenu()
+    }
+
+    @objc private func audioDevicesChanged() {
+        rebuildAudioInputMenu()
+    }
+
+    @objc private func recordingInterrupted() {
+        guard state == .recording else { return }
+        stopAndTranscribe()
     }
 
     private func showError(_ message: String) {
