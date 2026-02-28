@@ -8,7 +8,7 @@ DMG_NAME="$APP_NAME.dmg"
 VOLUME_NAME="$APP_NAME"
 
 # Current version (update this each release)
-CURRENT_VERSION="1.0.1"
+CURRENT_VERSION="1.0.2"
 
 echo "Current version: $CURRENT_VERSION"
 printf "New version number: "
