@@ -5,9 +5,6 @@ final class TextPaster {
     static func paste(text: String, completion: @escaping () -> Void) {
         let pasteboard = NSPasteboard.general
 
-        // Save current clipboard contents
-        let previousContents = pasteboard.string(forType: .string)
-
         // Set transcribed text
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
@@ -24,12 +21,8 @@ final class TextPaster {
         keyUp?.flags = .maskCommand
         keyUp?.post(tap: .cghidEventTap)
 
-        // Restore clipboard after a short delay
+        // Allow time for Cmd+V to take effect
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            pasteboard.clearContents()
-            if let previous = previousContents {
-                pasteboard.setString(previous, forType: .string)
-            }
             completion()
         }
     }
