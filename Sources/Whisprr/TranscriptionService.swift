@@ -1,7 +1,7 @@
 import Foundation
 
 final class TranscriptionService {
-    private let model = "gemini-2.5-flash"
+    private let model = "google/gemini-2.5-flash"
 
     func transcribe(audioFileURL: URL, apiKey: String, completion: @escaping (Result<String, Error>) -> Void) {
         let audioData: Data
@@ -14,26 +14,30 @@ final class TranscriptionService {
 
         let base64Audio = audioData.base64EncodedString()
 
-        let endpoint = "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"
+        let endpoint = "https://openrouter.ai/api/v1/chat/completions"
         guard let url = URL(string: endpoint) else {
             completion(.failure(TranscriptionError.invalidURL))
             return
         }
 
         let body: [String: Any] = [
-            "contents": [[
-                "parts": [
+            "model": model,
+            "messages": [[
+                "role": "user",
+                "content": [
                     [
-                        "inline_data": [
-                            "mime_type": "audio/wav",
+                        "type": "input_audio",
+                        "input_audio": [
                             "data": base64Audio,
-                        ]
+                            "format": "wav",
+                        ],
                     ],
                     [
-                        "text": "Transcribe this audio exactly as spoken. Output only the transcription, no commentary."
+                        "type": "text",
+                        "text": "Transcribe this audio exactly as spoken. Output only the transcription, no commentary.",
                     ],
-                ]
-            ]]
+                ],
+            ]],
         ]
 
         guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
@@ -44,7 +48,7 @@ final class TranscriptionService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = jsonData
 
         let masked = String(apiKey.prefix(10)) + "..." + String(apiKey.suffix(4))
@@ -95,12 +99,11 @@ final class TranscriptionService {
                     return
                 }
 
-                // Extract text: candidates[0].content.parts[0].text
-                guard let candidates = json["candidates"] as? [[String: Any]],
-                      let first = candidates.first,
-                      let content = first["content"] as? [String: Any],
-                      let parts = content["parts"] as? [[String: Any]],
-                      let text = parts.first?["text"] as? String
+                // Extract text: choices[0].message.content
+                guard let choices = json["choices"] as? [[String: Any]],
+                      let first = choices.first,
+                      let message = first["message"] as? [String: Any],
+                      let text = message["content"] as? String
                 else {
                     completion(.failure(TranscriptionError.invalidResponse))
                     return
@@ -136,7 +139,7 @@ enum TranscriptionError: LocalizedError {
         case .invalidResponse: return "Unexpected API response format"
         case .emptyTranscription: return "No speech detected"
         case .apiError(let msg): return "API error: \(msg)"
-        case .quotaExceeded: return "Gemini API quota exceeded. Check billing at ai.google.dev or wait for quota reset."
+        case .quotaExceeded: return "OpenRouter API quota exceeded. Check your account at openrouter.ai or wait for quota reset."
         }
     }
 }

@@ -20,14 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var apiKey: String {
-        get {
-            // Prefer environment variable (set in terminal before `swift run`)
-            if let envKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"], !envKey.isEmpty {
-                return envKey
-            }
-            return UserDefaults.standard.string(forKey: "gemini_api_key") ?? ""
-        }
-        set { UserDefaults.standard.set(newValue, forKey: "gemini_api_key") }
+        get { UserDefaults.standard.string(forKey: "openrouter_api_key") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "openrouter_api_key") }
     }
 
     // Track solo modifier key state to detect solo press (no combo)
@@ -198,7 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startRecording() {
         guard !apiKey.isEmpty else {
-            showError("No API key set. Use the menu bar to set your Gemini API key.")
+            showError("No API key set. Use the menu bar to set your OpenRouter API key.")
             return
         }
 
@@ -242,9 +236,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if let txError = error as? TranscriptionError {
                         switch txError {
                         case .quotaExceeded:
-                            self.showError("Gemini API quota exceeded.\n\nCheck your billing at ai.google.dev or wait for the quota to reset.")
+                            self.showError("OpenRouter API quota exceeded.\n\nCheck your account at openrouter.ai or wait for the quota to reset.")
                         case .apiError(let msg) where msg.lowercased().contains("api key"):
-                            self.showError("Gemini API key error: \(msg)\n\nUse \"Set API Key...\" in the menu bar to re-enter your key.")
+                            self.showError("OpenRouter API key error: \(msg)\n\nUse \"Set API Key...\" in the menu bar to re-enter your key.")
                         default:
                             self.showError("Transcription failed: \(txError.localizedDescription)")
                         }
@@ -268,15 +262,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func setAPIKey() {
         let alert = NSAlert()
-        alert.messageText = "Gemini API Key"
-        alert.informativeText = "Enter your Google Gemini API key.\nGet one free at: ai.google.dev"
+        alert.messageText = "OpenRouter API Key"
+        alert.informativeText = "Enter your OpenRouter API key.\nGet one at: openrouter.ai/keys"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
 
         let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         input.stringValue = apiKey
-        input.placeholderString = "AIza..."
+        input.placeholderString = "sk-or-..."
         alert.accessoryView = input
 
         // Bring app to front for the dialog
