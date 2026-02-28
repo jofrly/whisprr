@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let audioRecorder = AudioRecorder()
     private let transcriptionService = TranscriptionService()
+    private let statusOverlay = StatusOverlay()
 
     private var state: AppState = .idle {
         didSet { updateUI() }
@@ -76,21 +77,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Whisprr")
                 button.contentTintColor = nil
                 statusMenuItem.title = "Idle — Right ⌘ to record"
+                statusOverlay.hide()
 
             case .recording:
                 button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording")
                 button.contentTintColor = .systemRed
                 statusMenuItem.title = "Recording... Right ⌘ to stop"
+                statusOverlay.show(message: "Recording...", symbolName: "mic.fill")
 
             case .transcribing:
                 button.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "Transcribing")
                 button.contentTintColor = .systemOrange
                 statusMenuItem.title = "Transcribing..."
+                statusOverlay.show(message: "Transcribing...", symbolName: "ellipsis.circle")
 
             case .pasting:
                 button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Pasting")
                 button.contentTintColor = .systemBlue
                 statusMenuItem.title = "Pasting..."
+                statusOverlay.hide()
             }
         }
     }
