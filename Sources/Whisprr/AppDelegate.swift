@@ -8,6 +8,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let audioRecorder = AudioRecorder()
     private let transcriptionService = TranscriptionService()
     private let statusOverlay = StatusOverlay()
+    private let hotkeyRecorder = HotkeyRecorderPanel()
+
+    private var hotkey: Hotkey = Hotkey.load()
+    private var isRecordingHotkey = false
 
     private var state: AppState = .idle {
         didSet { updateUI() }
@@ -24,9 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         set { UserDefaults.standard.set(newValue, forKey: "gemini_api_key") }
     }
 
-    // Track Right Cmd key state to detect solo press (no combo)
-    private var rightCmdDown = false
-    private var otherKeysDuringRightCmd = false
+    // Track solo modifier key state to detect solo press (no combo)
+    private var soloModifierDown = false
+    private var otherKeysDuringSoloModifier = false
 
     enum AppState {
         case idle, recording, transcribing, pasting
@@ -55,13 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        statusMenuItem = NSMenuItem(title: "Idle — Right ⌘ to record", action: nil, keyEquivalent: "")
+        statusMenuItem = NSMenuItem(title: "Idle — \(hotkey.displayName) to record", action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
 
         menu.addItem(.separator())
 
         menu.addItem(NSMenuItem(title: "Set API Key...", action: #selector(setAPIKey), keyEquivalent: ","))
+        menu.addItem(NSMenuItem(title: "Change Hotkey...", action: #selector(changeHotkey), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Whisprr", action: #selector(quit), keyEquivalent: "q"))
 
@@ -76,13 +81,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .idle:
                 button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Whisprr")
                 button.contentTintColor = nil
-                statusMenuItem.title = "Idle — Right ⌘ to record"
+                statusMenuItem.title = "Idle — \(hotkey.displayName) to record"
                 statusOverlay.hide()
 
             case .recording:
                 button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Recording")
                 button.contentTintColor = .systemRed
-                statusMenuItem.title = "Recording... Right ⌘ to stop"
+                statusMenuItem.title = "Recording... \(hotkey.displayName) to stop"
                 statusOverlay.show(message: "Recording...", symbolName: "mic.fill")
 
             case .transcribing:
@@ -100,7 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Hotkey (Right Command)
+    // MARK: - Hotkey
 
     private func setupHotkey() {
         // Global monitor for when app is not focused
@@ -116,31 +121,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleHotkeyEvent(_ event: NSEvent) {
+        guard !isRecordingHotkey else { return }
+
+        switch hotkey {
+        case .soloModifier(let targetKeyCode, _):
+            handleSoloModifierEvent(event, targetKeyCode: targetKeyCode)
+        case .combination(let targetKeyCode, let targetModifiers):
+            handleCombinationEvent(event, targetKeyCode: targetKeyCode, targetModifiers: targetModifiers)
+        }
+    }
+
+    private func handleSoloModifierEvent(_ event: NSEvent, targetKeyCode: UInt16) {
         if event.type == .keyDown {
-            // Any key pressed while Right Cmd is held = combo, not solo
-            if rightCmdDown {
-                otherKeysDuringRightCmd = true
+            if soloModifierDown {
+                otherKeysDuringSoloModifier = true
             }
             return
         }
 
         // flagsChanged event
-        let rightCmdKeyCode: UInt16 = 54
-
-        if event.keyCode == rightCmdKeyCode {
-            if event.modifierFlags.contains(.command) {
-                // Right Cmd pressed down
-                rightCmdDown = true
-                otherKeysDuringRightCmd = false
-            } else if rightCmdDown {
-                // Right Cmd released
-                rightCmdDown = false
-                if !otherKeysDuringRightCmd {
-                    // Solo press — toggle recording
+        if event.keyCode == targetKeyCode {
+            let relevantFlags = event.modifierFlags.intersection([.command, .option, .shift, .control, .function])
+            if !relevantFlags.isEmpty {
+                // Target modifier pressed down
+                soloModifierDown = true
+                otherKeysDuringSoloModifier = false
+            } else if soloModifierDown {
+                // Target modifier released
+                soloModifierDown = false
+                if !otherKeysDuringSoloModifier {
                     DispatchQueue.main.async { [self] in
                         toggle()
                     }
                 }
+            }
+        }
+    }
+
+    private func handleCombinationEvent(_ event: NSEvent, targetKeyCode: UInt16, targetModifiers: UInt) {
+        guard event.type == .keyDown else { return }
+        guard !event.isARepeat else { return }
+
+        let currentMods = event.modifierFlags.intersection([.command, .option, .shift, .control, .function])
+        if event.keyCode == targetKeyCode && currentMods.rawValue == UInt(targetModifiers) {
+            DispatchQueue.main.async { [self] in
+                toggle()
             }
         }
     }
@@ -248,6 +273,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var cleanedKey = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             cleanedKey = cleanedKey.unicodeScalars.filter { !$0.properties.isDefaultIgnorableCodePoint }.map { String($0) }.joined()
             apiKey = cleanedKey
+        }
+    }
+
+    @objc private func changeHotkey() {
+        isRecordingHotkey = true
+        hotkeyRecorder.show { [weak self] newHotkey in
+            guard let self = self else { return }
+            self.isRecordingHotkey = false
+            if let newHotkey = newHotkey {
+                self.hotkey = newHotkey
+                newHotkey.save()
+                self.updateUI()
+            }
         }
     }
 
